@@ -1,0 +1,102 @@
+#!/bin/bash
+#================================================
+# Wait process is finished
+#===============================================
+
+RUN=1
+PID=0
+REQUIRE_ARGS=1
+CHECKPID=0
+CHECKZOMBIE=0
+SEC=1
+
+
+loopcond () {
+   test -d "/proc/$PID" && \
+   [ -z "`grep zombie /proc/$PID/status`" ] && \
+   [ ! $MAXSEC ] || (($MAXSEC > $1));
+}
+
+loopwait () { 
+   TIME=0
+   while loopcond $TIME; do 
+      TIME=`expr $TIME + $SEC` 2> /dev/null
+      sleep $SEC
+   done
+}
+
+options () {
+   while getopts ":hezm:s:" opt; do
+      case $opt in
+         h)
+            help
+            exit 0
+            ;;
+         e)
+            CHECKPID=1
+            ;;
+         z)
+            CHECKPID=1
+            CHECKZOMBIE=1
+            ;;
+         m)
+            MAXSEC=${OPTARG}
+            if ! [[ $MAXSEC =~ ^[0-9]+$ ]]; then
+               echo "Error: -m option must be integer" >&2
+               exit -1
+            fi
+            ;;
+         s)
+            SEC=${OPTARG}
+            if ! [[ $SEC =~ ^[0-9]+$ ]]; then
+               echo "Error: -s option must be integer" >&2
+               exit -1
+            fi
+            ;;
+         \?)
+            echo "Invalid option: -$OPTARG" >&2
+            exit -1
+            ;;
+     esac
+   done
+   shift $((OPTIND-1))
+   if [ $REQUIRE_ARGS -eq 1 ]; then
+      if [[ $1 =~ ^[0-9]+$ ]]; then
+         PID=$1
+      else
+         echo "Error: PID is required" >&2
+         exit -1
+      fi
+   fi
+}
+
+help () {
+   echo -e "usage: waitpid [OPTIONS] PID" 
+   echo -e " -e\t\tcheck if process exist" 
+   echo -e " -h\t\tshow this help" 
+   echo -e " -m maxtime\twait a maximum of maxtime seconds" 
+   echo -e " -z\t\tcheck if process is zombie" 
+}
+
+checkpid () {
+   if ! [ -d /proc/$PID ]; then
+      echo "process don't exist" >&2
+      exit -1
+   fi
+}
+
+checkzombie () {
+   if [ ! -z "`grep zombie /proc/$PID/status`" ]; then
+      echo "process is zombie" >&2
+      exit -1
+   fi
+}
+
+main () {
+   options $@
+   [ $CHECKPID -eq 1 ] && checkpid
+   [ $CHECKZOMBIE -eq 1 ] && checkzombie
+   loopwait
+}
+
+main $@
